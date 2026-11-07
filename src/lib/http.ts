@@ -10,9 +10,15 @@ export function json(body: unknown, status = 200, headers?: Record<string, strin
 /** CSRF defence in depth (cookies are also SameSite=Strict): same-origin JSON POSTs only. */
 export function assertSameOriginJson(req: NextRequest): NextResponse | null {
   const origin = req.headers.get('origin');
-  const host = req.headers.get('host');
+  // Behind a reverse proxy the Host header is the internal address, so also accept the
+  // proxy's forwarded host, or an explicit APP_URL.
+  const hosts = [
+    req.headers.get('x-forwarded-host')?.split(',')[0]?.trim(),
+    req.headers.get('host'),
+    process.env.APP_URL ? new URL(process.env.APP_URL).host : undefined,
+  ].filter((h): h is string => !!h);
   try {
-    if (!origin || !host || new URL(origin).host !== host) return json({ error: 'Forbidden' }, 403);
+    if (!origin || !hosts.includes(new URL(origin).host)) return json({ error: 'Forbidden' }, 403);
   } catch {
     return json({ error: 'Forbidden' }, 403);
   }
